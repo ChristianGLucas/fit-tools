@@ -1,0 +1,2 @@
+# Add your Python runtime dependencies here, one per line.
+fitparse==1.2.0

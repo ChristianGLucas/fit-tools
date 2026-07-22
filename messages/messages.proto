@@ -1,0 +1,261 @@
+// This file defines the data contracts (messages) for your Axiom package.
+// Every node's --input and --output refers to a message defined here.
+//
+// Run `axiom create message <Name>` to scaffold a new message below.
+// Run `axiom generate` to compile these definitions into language bindings in gen/.
+//
+// DOCUMENTATION
+//   Comments written directly above a message or field declaration are extracted
+//   automatically at publish time and shown in the Axiom registry as documentation.
+//   Write your descriptions there — no separate doc files needed.
+//
+//   Leading comment  (no blank line before the declaration) → registry description ✓
+//   Detached comment (blank line before the declaration)    → ignored by registry  ✗
+//
+// This file is yours to edit. Axiom only appends new message blocks — it never
+// overwrites or removes content you have written.
+
+syntax = "proto3";
+
+package christiangeorgelucas.fit_tools;
+
+// Structured, caller-facing failure. `code` is one of: INVALID_INPUT (not a
+// decodable FIT file, or a malformed argument), LIMIT_EXCEEDED (input or
+// requested output exceeds a hard bound), COMPUTE_ERROR (decode failed for a
+// reason not covered above). Empty `code` means no error.
+message FitError {
+  string code = 1;
+  string message = 2;
+}
+
+// The canonical input every node in this package accepts: the raw FIT file,
+// inline or fetched from a URL.
+message FitInput {
+  // Raw .FIT file bytes. Takes precedence over `url` when both are set.
+  bytes data = 1;
+  // Fetch the FIT file from this http(s) URL when `data` is empty.
+  // SSRF-guarded: only public hosts are resolved and connected to.
+  string url = 2;
+}
+
+// FIT file_id message: what kind of file this is and which device wrote it.
+message FileId {
+  // "activity", "course", "workout", "settings", "device", ... (the FIT
+  // file_type enum name; "unknown" if the raw value has no known name).
+  string type = 1;
+  string manufacturer = 2;
+  // Product name if Garmin's profile has one for this manufacturer/product
+  // id pair, else empty.
+  string product = 3;
+  uint32 product_id = 4;
+  bool has_product_id = 5;
+  uint32 serial_number = 6;
+  bool has_serial_number = 7;
+  // ISO 8601 UTC, e.g. "2026-06-01T14:30:00Z".
+  string time_created = 8;
+  bool has_time_created = 9;
+}
+
+message GetFileInfoOutput {
+  FileId file_id = 1;
+  bool ok = 2;
+  FitError error = 3;
+}
+
+// One FIT message type present in a file and how many instances of it occur.
+message MessageTypeCount {
+  // The FIT message name, e.g. "record", "session", "lap", "device_info",
+  // "event", "hrv". "unknown_<n>" for a numbered message the installed FIT
+  // profile has no name for.
+  string name = 1;
+  uint32 count = 2;
+}
+
+message ListMessageTypesOutput {
+  repeated MessageTypeCount message_types = 1;
+  uint32 total_messages = 2;
+  bool ok = 3;
+  FitError error = 4;
+}
+
+// One per-sample activity record — the FIT `record` message. Every field
+// has a paired `has_*` flag because FIT devices only write the fields their
+// sensors actually produced; a missing field is legitimate and distinct
+// from a real zero.
+message Record {
+  // ISO 8601 UTC.
+  string timestamp = 1;
+  bool has_timestamp = 2;
+  // Degrees, WGS-84 (converted from FIT's semicircle encoding).
+  double lat = 3;
+  double lon = 4;
+  bool has_position = 5;
+  // Meters. Prefers `enhanced_altitude` (higher resolution) when present,
+  // else `altitude`.
+  double altitude = 6;
+  bool has_altitude = 7;
+  // Beats per minute.
+  uint32 heart_rate = 8;
+  bool has_heart_rate = 9;
+  // Revolutions per minute.
+  uint32 cadence = 10;
+  bool has_cadence = 11;
+  // Meters per second. Prefers `enhanced_speed` when present, else `speed`.
+  double speed = 12;
+  bool has_speed = 13;
+  // Watts.
+  uint32 power = 14;
+  bool has_power = 15;
+  // Degrees Celsius.
+  double temperature = 16;
+  bool has_temperature = 17;
+  // Cumulative meters since the start of the session.
+  double distance = 18;
+  bool has_distance = 19;
+}
+
+message ExtractRecordsInput {
+  FitInput fit = 1;
+  // Max records to return, 1..1500. 0 (default) means the package default
+  // of 1000. The 1500 ceiling keeps a fully-populated response under the
+  // platform's deployed-invocation payload limit.
+  uint32 limit = 2;
+}
+
+message ExtractRecordsOutput {
+  repeated Record records = 1;
+  // True if the file has more `record` messages than were returned.
+  bool truncated = 2;
+  // Total `record` messages found in the file, regardless of `limit`.
+  uint32 total_available = 3;
+  bool ok = 4;
+  FitError error = 5;
+}
+
+// One FIT `session` message — whole-activity (or whole-sport-segment, for
+// multi-sport files) summary metrics.
+message Session {
+  uint32 index = 1;
+  // The FIT sport enum name, e.g. "running", "cycling", "swimming".
+  string sport = 2;
+  string sub_sport = 3;
+  string start_time = 4;
+  bool has_start_time = 5;
+  // Seconds, including any paused time.
+  double total_elapsed_time = 6;
+  // Seconds, excluding paused time.
+  double total_timer_time = 7;
+  double total_distance = 8;
+  bool has_total_distance = 9;
+  uint32 total_calories = 10;
+  bool has_total_calories = 11;
+  double avg_speed = 12;
+  bool has_avg_speed = 13;
+  double max_speed = 14;
+  bool has_max_speed = 15;
+  uint32 avg_heart_rate = 16;
+  bool has_avg_heart_rate = 17;
+  uint32 max_heart_rate = 18;
+  bool has_max_heart_rate = 19;
+  uint32 avg_power = 20;
+  bool has_avg_power = 21;
+  uint32 max_power = 22;
+  bool has_max_power = 23;
+  uint32 avg_cadence = 24;
+  bool has_avg_cadence = 25;
+  double total_ascent = 26;
+  bool has_total_ascent = 27;
+  double total_descent = 28;
+  bool has_total_descent = 29;
+  uint32 num_laps = 30;
+}
+
+message ExtractSessionsOutput {
+  repeated Session sessions = 1;
+  bool ok = 2;
+  FitError error = 3;
+}
+
+// One FIT `lap` message — a manual lap press, an auto-lap trigger, or a
+// structured-workout step boundary.
+message Lap {
+  uint32 index = 1;
+  string start_time = 2;
+  bool has_start_time = 3;
+  double total_elapsed_time = 4;
+  double total_timer_time = 5;
+  double total_distance = 6;
+  bool has_total_distance = 7;
+  uint32 total_calories = 8;
+  bool has_total_calories = 9;
+  double avg_speed = 10;
+  bool has_avg_speed = 11;
+  double max_speed = 12;
+  bool has_max_speed = 13;
+  uint32 avg_heart_rate = 14;
+  bool has_avg_heart_rate = 15;
+  uint32 max_heart_rate = 16;
+  bool has_max_heart_rate = 17;
+  uint32 avg_power = 18;
+  bool has_avg_power = 19;
+  uint32 max_power = 20;
+  bool has_max_power = 21;
+  uint32 avg_cadence = 22;
+  bool has_avg_cadence = 23;
+  double total_ascent = 24;
+  bool has_total_ascent = 25;
+  double total_descent = 26;
+  bool has_total_descent = 27;
+  // The FIT lap_trigger enum name that ended this lap, e.g. "manual",
+  // "distance", "time", "session_end".
+  string lap_trigger = 28;
+}
+
+message ExtractLapsOutput {
+  repeated Lap laps = 1;
+  bool ok = 2;
+  FitError error = 3;
+}
+
+// One FIT `device_info` message — the recording device itself, or a paired
+// ANT+/Bluetooth sensor (heart-rate strap, power meter, cadence sensor,
+// footpod) that contributed data.
+message DeviceInfo {
+  uint32 device_index = 1;
+  string manufacturer = 2;
+  string product = 3;
+  uint32 product_id = 4;
+  bool has_product_id = 5;
+  uint32 serial_number = 6;
+  bool has_serial_number = 7;
+  string software_version = 8;
+  bool has_software_version = 9;
+  // The FIT battery_status enum name, e.g. "good", "low", "critical".
+  string battery_status = 10;
+  bool has_battery_status = 11;
+  // The FIT source_type enum name, e.g. "antplus", "ant", "local",
+  // "bluetooth_low_energy".
+  string source_type = 12;
+}
+
+message ExtractDeviceInfoOutput {
+  repeated DeviceInfo device_infos = 1;
+  bool ok = 2;
+  FitError error = 3;
+}
+
+// The combined decode: file identity plus every session, lap, device, and
+// (capped) record. See ParseActivityOutput for the record cap.
+message ParseActivityOutput {
+  FileId file_id = 1;
+  repeated Session sessions = 2;
+  repeated Lap laps = 3;
+  repeated DeviceInfo device_infos = 4;
+  repeated Record records = 5;
+  // True if the file has more `record` messages than were included here.
+  bool truncated = 6;
+  // Total `record` messages found in the file, regardless of the 1000 cap.
+  uint32 total_records = 7;
+  bool ok = 8;
+  FitError error = 9;
+}

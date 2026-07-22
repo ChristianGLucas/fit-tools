@@ -1,0 +1,124 @@
+name: christiangeorgelucas/fit-tools
+version: 0.1.0
+language: python
+description: >-
+  Decode Garmin/ANT FIT binary fitness-activity files into clean, structured
+  JSON, wrapping the MIT-licensed dtcooper/python-fitparse library (the
+  reference-grade open-source FIT decoder, generated from Garmin's own FIT
+  SDK profile — 85 message types, 1038 fields). Parses the FIT binary
+  container (definition messages, compressed timestamps, developer fields,
+  scale/offset-encoded fields, CRC) that Garmin/Wahoo/Suunto and other
+  ANT+/FIT-compliant devices export for runs, rides, swims, and other
+  activities. Exposes file identity metadata, per-second/per-sample activity
+  records (timestamp, GPS position, altitude, heart rate, power, cadence,
+  speed, temperature, cumulative distance), session summaries, lap splits,
+  and recording-device info, plus a lightweight message-type inventory for
+  files whose exact contents are unknown up front. This package only
+  DECODES FIT; it does not interpret GPX/KML track XML (see
+  christiangeorgelucas/gpx-tools) or run time-series statistics (see
+  christiangeorgelucas/time-series-tools) — a decoded activity's records
+  compose cleanly into either downstream. Stateless, deterministic, offline
+  (no network calls except an explicit input `url` fetch, SSRF-guarded).
+  Malformed, truncated, or non-FIT input returns a structured error, never a
+  crash. Input and output payloads are capped well under the platform's
+  transport limit; oversized files or record counts are rejected or
+  truncated with a clear, explicit signal rather than silently dropped.
+license: MIT
+author: Christian George Lucas
+tags:
+  - fit
+  - garmin
+  - ant
+  - fitness
+  - activity
+  - gps
+  - heart-rate
+  - wearables
+  - time-series
+  - sports
+
+nodes:
+  - name: GetFileInfo
+    input: FitInput
+    output: GetFileInfoOutput
+    description: >-
+      Decode just the FIT file_id message: file type (activity, course,
+      settings, workout, ...), manufacturer, product, serial number, and
+      creation time. The cheapest node to run first when a file's exact
+      contents (activity vs. course vs. something else) aren't yet known —
+      it stops after the first message rather than decoding the whole file.
+      A file with no file_id message (not a valid FIT file) returns a
+      structured error.
+
+  - name: ListMessageTypes
+    input: FitInput
+    output: ListMessageTypesOutput
+    description: >-
+      Inventory every distinct FIT message type present in the file and how
+      many of each (e.g. record: 3600, session: 1, lap: 12, device_info: 3),
+      without materializing any message's fields. Useful for deciding which
+      of the other extraction nodes are worth calling on a file of unknown
+      shape, and for spotting a file that has, say, zero `record` messages
+      before paying to extract an empty time series.
+
+  - name: ParseActivity
+    input: FitInput
+    output: ParseActivityOutput
+    description: >-
+      The general-purpose decode: file identity, every session, every lap,
+      every recording-device, and the activity's per-sample records in one
+      call — the structure the other extraction nodes (ExtractRecords,
+      ExtractSessions, ExtractLaps, ExtractDeviceInfo) are specialized views
+      of. Records are capped at 1,000 in this combined response (truncated=
+      true past the cap, with total_records giving the real count) to stay
+      well under the platform's payload limit alongside the other message
+      types; call ExtractRecords directly for a file's full time series.
+
+  - name: ExtractRecords
+    input: ExtractRecordsInput
+    output: ExtractRecordsOutput
+    description: >-
+      Extract only the FIT `record` messages — the per-sample activity time
+      series (timestamp, lat/lon, altitude, heart rate, power, cadence,
+      speed, temperature, cumulative distance) — as a flat, time-ordered
+      array ready to feed a chart, a GPX track (christiangeorgelucas/
+      gpx-tools composes downstream), or a time-series analysis
+      (christiangeorgelucas/time-series-tools). Prefers Garmin's
+      "enhanced" (higher-resolution) altitude/speed fields when present,
+      falling back to the standard-resolution fields. Capped at 1,000
+      records by default, 1,500 maximum (truncated=true past the returned
+      count; both bounds keep a fully-populated response under the
+      platform's payload limit) — pass `limit` and page through a long
+      recording using the returned total_available.
+
+  - name: ExtractSessions
+    input: FitInput
+    output: ExtractSessionsOutput
+    description: >-
+      Extract every FIT `session` message: sport/sub-sport, start time,
+      elapsed/timer duration, total distance, calories, average/max heart
+      rate, average/max speed, average/max power, average cadence, and total
+      ascent/descent — one entry per session (almost always one per file,
+      but multi-sport activities have several). The whole-activity summary
+      view; see ExtractLaps for the finer-grained per-lap splits within a
+      session.
+
+  - name: ExtractLaps
+    input: FitInput
+    output: ExtractLapsOutput
+    description: >-
+      Extract every FIT `lap` message: the same summary metrics as
+      ExtractSessions (duration, distance, calories, heart rate, speed,
+      power, cadence, ascent/descent) but scoped to one lap — a manual lap
+      press, an auto-lap distance/time trigger, or a structured-workout
+      step — plus the trigger type that ended each lap.
+
+  - name: ExtractDeviceInfo
+    input: FitInput
+    output: ExtractDeviceInfoOutput
+    description: >-
+      Extract every FIT `device_info` message: the recording device and any
+      paired ANT+/Bluetooth sensors (heart-rate strap, power meter, cadence
+      sensor) that contributed data — manufacturer, product, serial number,
+      software version, battery status, and whether each was the primary
+      recording device or a paired sensor.
