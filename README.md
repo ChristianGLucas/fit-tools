@@ -6,7 +6,7 @@ files into clean, structured JSON. Wraps the MIT-licensed
 (generated from Garmin's own FIT SDK profile) — no reimplementation of the
 FIT binary format.
 
-Built for the [Axiom](https://axiom.dev) marketplace, handle
+Built for the [Axiom](https://axiomide.com) marketplace, handle
 `christiangeorgelucas`.
 
 ## Nodes
