@@ -1,5 +1,5 @@
 name: christiangeorgelucas/fit-tools
-version: 0.1.0
+version: 0.2.0
 language: python
 description: >-
   Decode Garmin/ANT FIT binary fitness-activity files into clean, structured

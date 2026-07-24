@@ -1,7 +1,7 @@
 import pytest
 
 from gen.messages_pb2 import FitInput
-from nodes._common import FitDecodeError, MAX_FIT_BYTES, raw_bytes
+from nodes._common import FitDecodeError, raw_bytes
 
 
 def test_raw_bytes_prefers_data_over_url():
@@ -14,10 +14,11 @@ def test_raw_bytes_empty_input_error():
     assert exc.value.code == "INVALID_INPUT"
 
 
-def test_raw_bytes_oversized_data_error():
-    with pytest.raises(FitDecodeError) as exc:
-        raw_bytes(FitInput(data=b"\x00" * (MAX_FIT_BYTES + 1)))
-    assert exc.value.code == "LIMIT_EXCEEDED"
+def test_raw_bytes_large_input_no_crash():
+    # Input size is the platform's concern, not this node's -- a large
+    # inline payload is passed through unchanged, not rejected.
+    data = b"\x00" * (11 * 1024 * 1024)
+    assert raw_bytes(FitInput(data=data)) == data
 
 
 @pytest.mark.parametrize("url", [

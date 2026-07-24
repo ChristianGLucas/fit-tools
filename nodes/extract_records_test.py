@@ -1,7 +1,6 @@
 from gen.messages_pb2 import FitInput, ExtractRecordsInput
 from nodes._test_helpers import _TestContext
 from nodes.extract_records import extract_records
-from nodes._common import MAX_RECORD_LIMIT
 from nodes._fit_fixtures import (
     ACTIVITY_FIXTURE, EXPECTED_RECORD_1, EXPECTED_RECORD_2_HAS_FLAGS_FALSE,
     NOT_A_FIT_FILE, build_records_only_fixture, truncated_fixture, bad_crc_fixture,
@@ -65,11 +64,15 @@ def test_extract_records_default_limit_no_truncation_when_under():
     assert out.truncated is False
 
 
-def test_extract_records_limit_over_max_is_rejected():
+def test_extract_records_large_limit_is_honored_not_rejected():
+    # A limit above the old hard ceiling is honored, not rejected -- max
+    # response size is the platform's concern, not this node's.
     ax = _TestContext()
-    out = extract_records(ax, ExtractRecordsInput(fit=FitInput(data=ACTIVITY_FIXTURE), limit=MAX_RECORD_LIMIT + 1))
-    assert out.ok is False
-    assert out.error.code == "INVALID_ARGUMENT"
+    fixture = build_records_only_fixture(25)
+    out = extract_records(ax, ExtractRecordsInput(fit=FitInput(data=fixture), limit=2000))
+    assert out.ok is True
+    assert len(out.records) == 25
+    assert out.truncated is False
 
 
 def test_extract_records_records_are_time_ordered():

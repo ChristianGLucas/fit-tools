@@ -23,7 +23,7 @@ from datetime import datetime, timezone
 from fitparse import FitFile
 from fitparse.utils import FitEOFError, FitCRCError, FitHeaderError, FitParseError
 
-from nodes._common import FitDecodeError, MAX_MESSAGES_ITERATED, MAX_SUMMARY_MESSAGES
+from nodes._common import FitDecodeError
 
 _SEMICIRCLE_TO_DEG = 180.0 / (2 ** 31)
 
@@ -96,10 +96,7 @@ def _str(msg, name) -> str:
 
 
 def _messages(fitfile: FitFile, name=None):
-    """Iterate a FitFile's data messages, defensively capped so a
-    pathologically constructed file (many tiny compressed-timestamp record
-    headers referencing one definition) cannot make a single decode pass
-    iterate unboundedly. A real activity file never approaches this cap.
+    """Iterate a FitFile's data messages.
 
     python-fitparse parses LAZILY: only the file header is parsed
     synchronously in FitFile.__init__ (what open_fit's try/except covers).
@@ -113,7 +110,6 @@ def _messages(fitfile: FitFile, name=None):
     unhandled crash -- hence catching it here, at the single choke point
     every node's iteration goes through.
     """
-    n = 0
     it = fitfile.get_messages(name)
     while True:
         try:
@@ -122,9 +118,6 @@ def _messages(fitfile: FitFile, name=None):
             return
         except (FitParseError, FitEOFError, FitCRCError, FitHeaderError) as exc:
             raise FitDecodeError("INVALID_INPUT", f"FIT file is corrupt or truncated: {exc}")
-        n += 1
-        if n > MAX_MESSAGES_ITERATED:
-            raise FitDecodeError("LIMIT_EXCEEDED", f"FIT file has more than {MAX_MESSAGES_ITERATED} messages")
         yield msg
 
 
@@ -202,14 +195,15 @@ def _record_dict(msg) -> dict:
     }
 
 
-def extract_records(fitfile: FitFile, limit: int) -> tuple[list[dict], int, bool]:
-    """Extract `record` messages up to `limit`, but keep counting past it to
-    report the true total. Returns (records, total_available, truncated)."""
+def extract_records(fitfile: FitFile, limit: int | None) -> tuple[list[dict], int, bool]:
+    """Extract `record` messages up to `limit` (or all of them, if `limit`
+    is None), but keep counting past it to report the true total. Returns
+    (records, total_available, truncated)."""
     records = []
     total = 0
     for msg in _messages(fitfile, "record"):
         total += 1
-        if len(records) < limit:
+        if limit is None or len(records) < limit:
             records.append(_record_dict(msg))
     return records, total, total > len(records)
 
@@ -270,8 +264,6 @@ def _summary_dict(msg, *, with_sport: bool, with_trigger: bool) -> dict:
 def extract_sessions(fitfile: FitFile) -> list[dict]:
     out = []
     for i, msg in enumerate(_messages(fitfile, "session")):
-        if i >= MAX_SUMMARY_MESSAGES:
-            break
         d = _summary_dict(msg, with_sport=True, with_trigger=False)
         d["index"] = i
         out.append(d)
@@ -281,8 +273,6 @@ def extract_sessions(fitfile: FitFile) -> list[dict]:
 def extract_laps(fitfile: FitFile) -> list[dict]:
     out = []
     for i, msg in enumerate(_messages(fitfile, "lap")):
-        if i >= MAX_SUMMARY_MESSAGES:
-            break
         d = _summary_dict(msg, with_sport=False, with_trigger=True)
         d["index"] = i
         out.append(d)
@@ -292,8 +282,6 @@ def extract_laps(fitfile: FitFile) -> list[dict]:
 def extract_device_info(fitfile: FitFile) -> list[dict]:
     out = []
     for i, msg in enumerate(_messages(fitfile, "device_info")):
-        if i >= MAX_SUMMARY_MESSAGES:
-            break
         product_id = msg.get_value("product")
         serial = msg.get_value("serial_number")
         sw = msg.get_value("software_version")

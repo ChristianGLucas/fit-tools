@@ -2,7 +2,7 @@ from gen.messages_pb2 import (
     FitInput, ParseActivityOutput, FileId, Session, Lap, DeviceInfo, Record,
 )
 from gen.axiom_context import AxiomContext
-from nodes._common import PARSE_ACTIVITY_RECORD_CAP, FitDecodeError, err, err_from_exc, raw_bytes
+from nodes._common import FitDecodeError, err, err_from_exc, raw_bytes
 from nodes._fit import (
     open_fit,
     get_file_info as _get_file_info,
@@ -15,9 +15,8 @@ from nodes._fit import (
 
 def parse_activity(ax: AxiomContext, input: FitInput) -> ParseActivityOutput:
     """The general-purpose decode: file identity, every session, every lap,
-    every recording device, and the activity's per-sample records in one
-    call. Records are capped at 1000 in this combined response — call
-    ExtractRecords directly for a file's full time series.
+    every recording device, and every one of the activity's per-sample
+    records, all in one call.
     """
     try:
         data = raw_bytes(input)
@@ -35,7 +34,7 @@ def parse_activity(ax: AxiomContext, input: FitInput) -> ParseActivityOutput:
         sessions = _extract_sessions(fitfile)
         laps = _extract_laps(fitfile)
         device_infos = _extract_device_info(fitfile)
-        records, total_records, truncated = _extract_records(fitfile, PARSE_ACTIVITY_RECORD_CAP)
+        records, total_records, truncated = _extract_records(fitfile, None)
     except FitDecodeError as exc:
         return ParseActivityOutput(error=err_from_exc(exc))
 
